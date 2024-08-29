@@ -1,0 +1,109 @@
+name: Setup and Run SRS Server with RTMP
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 1: Install dependencies for SRS, NGINX RTMP module, and Python
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git build-essential libssl-dev python3 python3-pip nginx
+
+      # Step 2: Clone and build SRS
+      - name: Clone and build SRS
+        run: |
+          git clone https://github.com/ossrs/srs.git
+          cd srs
+          ./configure
+          make
+
+      # Step 3: Configure SRS
+      - name: Configure SRS
+        run: |
+          cd srs
+          cat <<EOT >> conf/srs.conf
+          listen      1935;
+          max_connections 1000;
+          daemon      off;
+          
+          vhost __defaultVhost__ {
+              rtc {
+                  listen      8000;
+                  bframe       discard;
+              }
+          
+              http_server {
+                  enabled      on;
+                  listen       8080;
+                  dir          ./objs/nginx/html;
+              }
+          
+              rtmp {
+                  enabled      on;
+                  chunk_size   4096;
+                  application live {
+                      live on;
+                      hls on;
+                      hls_path /tmp/hls;
+                      hls_fragment 10;
+                      hls_playlist_length 60;
+                  }
+              }
+          }
+          EOT
+
+      # Step 4: Configure NGINX for RTMP
+      - name: Configure NGINX RTMP
+        run: |
+          cat <<EOT >> /etc/nginx/nginx.conf
+          worker_processes 1;
+          
+          events {
+              worker_connections 1024;
+          }
+          
+          http {
+              server {
+                  listen 8080;
+                  location / {
+                      root /var/www/html;
+                  }
+              }
+          }
+          
+          rtmp {
+              server {
+                  listen 1935;
+                  chunk_size 4096;
+          
+                  application live {
+                      live on;
+                      record off;
+                      allow publish all;
+                      allow play all;
+                  }
+              }
+          }
+          EOT
+
+      # Step 5: Start NGINX and SRS servers
+      - name: Start SRS and NGINX
+        run: |
+          sudo systemctl start nginx
+          cd srs
+          ./objs/srs -c conf/srs.conf &
+
+      # Step 6: Run Python Script for Monitoring
+      - name: Run Python Script
+        run: |
+          python3 run_srs.py
