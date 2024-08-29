@@ -19,7 +19,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git build-essential libssl-dev python3 python3-pip nginx
 
-      # Step 2: Clone and build SRS
+      # Step 2: Remove existing SRS directory if it exists
+      - name: Remove existing SRS directory
+        run: |
+          if [ -d "srs" ]; then
+            rm -rf srs
+          fi
+
+      # Step 3: Clone and build SRS
       - name: Clone and build SRS
         run: |
           git clone https://github.com/ossrs/srs.git
@@ -27,7 +34,7 @@ jobs:
           ./configure
           make
 
-      # Step 3: Configure SRS
+      # Step 4: Configure SRS
       - name: Configure SRS
         run: |
           cd srs
@@ -62,7 +69,7 @@ jobs:
           }
           EOT
 
-      # Step 4: Configure NGINX for RTMP
+      # Step 5: Configure NGINX for RTMP
       - name: Configure NGINX RTMP
         run: |
           cat <<EOT >> /etc/nginx/nginx.conf
@@ -96,14 +103,14 @@ jobs:
           }
           EOT
 
-      # Step 5: Start NGINX and SRS servers
+      # Step 6: Start NGINX and SRS servers
       - name: Start SRS and NGINX
         run: |
           sudo systemctl start nginx
           cd srs
           ./objs/srs -c conf/srs.conf &
 
-      # Step 6: Run Python Script for Monitoring
+      # Step 7: Run Python Script for Monitoring
       - name: Run Python Script
         run: |
           python3 run_srs.py
